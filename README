@@ -1,0 +1,203 @@
+This software is distributed at no charge and in accordance with the
+Apache Software Foundation's Apache license. It is subject to the lack
+of warranties and indemnities, and conditions given at the begining of
+the mod_extract_forwarded.c file accompanying this file. No support is
+offered or available from the author of this Apache module.
+
+mod_extract_forwarded is designed to transparently (to other Apache modules)
+modify the information about the connection over which an HTTP request is
+received when that connection is not directly from a requesting client to the
+Apache server but is instead via one or more intervening proxy servers.
+
+Operation relies on the "X-Forwarded-For" headers, inserted by proxy servers.
+This is a non-RFC-standard request header which was introduced by the Squid
+caching proxy server's developers and which is now also supported, for reverse
+proxy server operation, by Apache 2. If the intervening proxy servers doesn't
+add such headers, we can't do anything about it. It is worth noting that a
+normally configured Squid proxy server will add to the X-Forwarded-For. However,
+when used as a proxy server, Apache prior to version 2 does not add
+X-Forwarded-For headers unless the third party mod_proxy_add_forward module has
+been added to it. This can leave potentially important gaps in the information
+recorded in X-Forwarded-For header.
+
+If the X-Forwarded-For header has been added properly by intervening proxy
+servers we can determine the IP number of originating client machine BUT there
+are some problems associated with this. 
+
+Firstly, it would be inadvisable to trust what has been inserted into the
+X-Forwarded-For header by any intervening machine outside the boundary of our
+own local network. At best we should only trust what was said by the proxy
+servers we control and which have handled the incoming request between the
+boundary of our network and our destination server; even that trust should be
+conditional as the header is plain text and eminently corruptible. It is vital
+that our incoming proxy server on our local network border is reliable in adding
+the X-Forwarded-For header so that we always have a clear demarcation in the
+information; the public IP number of the machine connecting to our network
+border. In practice, this means we can, at best, determine and show limited
+trust in the IP number of the machine outside our local network border that made
+the connection to our incoming (reverse) proxy server which it recorded the IP
+number of in the X-Forwarded-For header. 
+
+Secondly, there is limited use in determining the IP number of the client
+machine originating a request where that request comes from outside our local
+network and that IP number is a private IP number. This is because that client
+IP number is by definition not unique and may well also be in use in our local
+network; basing any decision on such an IP number and certainly relying on a DNS
+look up of it is courting disaster.
+
+Although these problems limit the usefulness of the information in
+X-Forwarded-For header, we can make valid, albeit careful, use of it as a factor
+in request processing, including access control, logging, and CGI use.
+
+Basically, mod_extract_forwarded operates by modifying the connection record
+associated with an HTTP request, for the period the request is being processed.
+The changes this module makes spoof the rest of the Apache modules into
+accepting as the IP originating the request something other than that of the
+machine that originated the connection to our Apache server.
+
+Because it is possible for a request to pass thru multiple proxies on
+the way from the originating client to destination server, in which case
+the X-Forwarded-For header should contain multiple IPs, this module
+needs to know which of those proxies can be regarded as trusted, in
+which case the entry it makes in the header can be trusted. As described
+below, you can use directives in Apache's httpd.conf configuration file
+to say which proxy server can be trusted,
+
+Since the connection record is modified to remove references to the actual
+connecting machines IP number, it is important that a record of this IP remains
+available. This module optionally stores that IP number in an environment
+variable immediately before altering the connection record. So CGIs have access
+to IP number if they need it and other Apache modules can also get to the IP
+number via the request_rec's subprocess_env table.
+
+Using this module has potentially serious implications for host-based access
+control to your server. Since "X-Forwarded-For" is just a piece of text in a
+request header, spoofing it is trivial. To compensate for this
+mod_extract_forwarded provides configuration directives to restrict the proxy
+hosts for which X-Forwarded-For will be processed. Disallowing a proxy host with
+these directives does not mean the proxy cannot get pages from your server, it
+just means the forwarded IP it provided will not be used. It is strongly_advised
+that you only process "X-Forwarded-For" entries from proxies you trust.
+
+If a request has passed through multiple proxies then the X-Forwarded-For
+may contain several IPs like this:
+
+X-Forwarded-For: client1, proxy1, proxy2
+
+Additionally there is the IP of the requesting host itself which is not included
+in the header. Let's say the requesting host is proxy3. First we check that the
+connecting host is in the is acceptable. Then we traverse the header from right
+to left and the first encountered IP which is not acceptbale will be treated as
+the client IP. For example if proxy1, proxy2, and proxy3 are acceptable then in
+the above header client1 would be shown as the connecting IP. But in the
+following header:
+
+X-Forwarded-For: client1, untrusted1, proxy1, proxy2
+
+untrusted1 would be shown as the connecting IP even though untrusted1 is
+proxying for client1. (Because untrusted1 might be lying.)
+
+The following Apache configuration directives can be used to specify the IP
+number of those proxy servers which are to be regarded as trustworthy. The
+directives can only be used in the default server configuration and in
+<VirtualHost> containers. The operation of these directives is similar to the
+operation of the mod_access allow/deny/order directives.
+
+MEForder: can have either of two value 'refuse,accept' or 'accept,refuse' and
+specifies the order in which the information in two associated directives,
+MEFaccept and MEFrefuse, are intepreted. The MEFaccept and MEFrefuse directives
+are each used to spcifiy one or more IP numbers.
+
+MEFrefuse: this can be 'all' OR a list of IP numbers and/or domain names of
+trusted proxy servers whose IP number can be derived by DNS from the domain
+name. The presence of 'all' overrides any particular IP numbers and means that
+no proxy servers are to be trusted. Individual IP numbers mean that those the
+proxy servers having them are not to be trusted. This defaults to 'all'.
+
+MEFaccept: this can be 'all' OR a list of IP numbers and/or domain names of
+trusted proxy servers whose IP number can be derived by DNS from the domain
+name. The presence of 'all' overrides any particular IP numbers and means that
+all proxy servers are to be trusted. Individual IP numbers mean that those the
+proxy servers having them are to be trusted. This defaults to an empty list of
+trusted IP numbers.
+
+Normal mode of use if to say:
+
+   MEForder refuse,accept
+   MEFrefuse all
+   MEFaccept <space separated list of your trusted proxy servers' IP numbers>
+
+with the MEForder directive saying apply the MEFrefuse rule first then the
+MEFaccept rule. MEFrefuse rule says do not trust any proxy servers but this is
+selectively overridden for particular IP numbers listed by the MEFaccept
+directive.
+
+MEFaddenv: this can be 'off', 'on' (the default) or a string. 'off'
+means that when spoofing, do not add an environment variable whose value
+is the IP number of the connecting machine. 'on' means that when
+spoofing, add an environment variable called 'MEF_RPROXY_ADDR' whose
+value is the IP number of the connecting machine. A string means that
+when spoofing, add an environment variable named by the string supplied
+whose value is the IP number of the connecting machine.
+
+MEFdebug: this can be 'on' or 'off' (the default). When turned 'on'
+information about how the mod_extract_forwarded module is processing
+every request to your Apache 2 server, and any associated internal
+redirects or subsrequests, is written to the server's error_log. Thhe
+amount of output written and the way it is generated is such that you
+would never normally want to turn this feature on. This feature is
+intended for debugging operation of the mod_extract_forwarded module
+and it is unlikely you will want to do that. See below for some examples
+of the output that will be generated but note that then indentation for
+clarity has been manually edited into the logged text:
+
+A request involving subrequests and internal redirects
+------------------------------------------------------
+
+MEF: phase:post read request, started processing, /
+MEF: phase:post read request, initial substituted 172.16.3.104 for 172.16.2.130, /
+MEF: phase:URI translate, started processing, /
+MEF: phase:URI translate, already done, NFA required, /
+MEF: phase:access check, started processing, /
+MEF: phase:access check, already done, NFA required, /
+
+    MEF: phase:URI translate, started processing, /index.html
+    MEF: phase:URI translate, not initial substituted 172.16.3.104 for 172.16.2.130, /index.html
+    MEF: phase:access check, started processing, /index.html
+    MEF: phase:access check, already done, NFA required, /index.html
+    MEF: phase:cleanup not initial, redo spoof substituted 172.16.3.104 for 172.16.2.130, /
+
+    MEF: phase:URI translate, started processing, /index.html.var
+    MEF: phase:URI translate, not initial substituted 172.16.3.104 for 172.16.2.130, /index.html.var
+        
+        MEF: phase:post read request, started processing, /index.html.en
+        MEF: phase:post read request, not initial substituted 172.16.3.104 for 172.16.2.130, /index.html.en
+        MEF: phase:URI translate, started processing, /index.html.en
+        MEF: phase:URI translate, already done, NFA required, /index.html.en
+        MEF: phase:cleanup not initial, redo spoof substituted 172.16.3.104 for 172.16.2.130, /
+
+    MEF: phase:cleanup not initial, redo spoof substituted 172.16.3.104 for 172.16.2.130, /
+    
+MEF: phase:cleanup initial, undo spoof substituted 172.16.2.130 for 172.16.3.104
+
+A simple request
+----------------
+
+MEF: phase:post read request, started processing, /apache_pb.gif
+MEF: phase:post read request, initial substituted 172.16.3.104 for 172.16.2.130, /apache_pb.gif
+MEF: phase:URI translate, started processing, /apache_pb.gif
+MEF: phase:URI translate, already done, NFA required, /apache_pb.gif
+MEF: phase:access check, started processing, /apache_pb.gif
+MEF: phase:access check, already done, NFA required, /apache_pb.gif
+MEF: phase:cleanup initial, undo spoof substituted 172.16.2.130 for 172.16.3.104
+
+A request which leads to reverse proxying
+-----------------------------------------
+
+MEF: phase:post read request, started processing, /mefx/cgi-bin/test.py
+MEF: phase:post read request, initial substituted 172.16.3.104 for 172.16.2.130, /mefx/cgi-bin/test.py
+MEF: phase:access check, started processing, /mefx/cgi-bin/test.py
+MEF: phase:access check, already done, NFA required, /mefx/cgi-bin/test.py
+MEF: phase:before proxy http, undo spoof substituted 172.16.2.130 for 172.16.3.104, /mefx/cgi-bin/test.py
+MEF: phase:logging, redo spoof substituted 172.16.3.104 for 172.16.2.130, /mefx/cgi-bin/test.py
+MEF: phase:cleanup initial, undo spoof substituted 172.16.2.130 for 172.16.3.104

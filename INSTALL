@@ -1,0 +1,23 @@
+This software is distributed at no charge and in accordance with the
+Apache Software Foundation's Apache license. It is subject to the lack
+of warranties and indemnities, and conditions given at the begining of
+the mod_extract_forwarded.c file accompanying this file. No support is
+offered or available from the author of this Apache module.
+
+mod_extract_forwarded has been developed and used in conjunction with
+Apache 2.0.48 using gcc and other related GNU tools running on Solaris 9
+on Sparc and Suse Linux 7.3 on x386.
+
+With Apache installed in /usr/local/apache2 the following command serves
+to build and install a DSO version of the module:
+
+/usr/local/apache2/bin/apxs -c -i -a mod_extract_forwarded.c
+
+If the Apache instance you are adding mod_extract_forwarded to will not
+have mod_proxy and proxy_http loaded then you will get an error when
+mod_extract_forwarded is loaded. In that case edit
+mod_extract_forwarded.c and comment out the #define for
+USING_proxy_http_module or change it to an an #undef. If you
+subsequently run Apache with proxy_http do not forget to reinstate the
+#define; failure to do so will mean that any X-Fowarded-For header
+inserted by proxy_http will use the spoofed IP number in error.
