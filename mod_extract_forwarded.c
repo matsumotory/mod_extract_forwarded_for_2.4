@@ -925,6 +925,9 @@ static int mef_access_check(request_rec *r)
  * spoof one) is added to the X-Forwarded-For header.
  */
 static int mef_before_proxy_http(request_rec *r,
+#if AP_SERVER_MINORVERSION_NUMBER >= 2
+                                 proxy_worker *worker,
+#endif
                                  proxy_server_conf *pconf,
                                  char *url, const char *proxyname,
                                  apr_port_t proxyport)
