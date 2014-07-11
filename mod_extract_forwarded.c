@@ -759,7 +759,7 @@ static int primary_request(request_rec *r, char *phase)
         if (conf->debug == MEF_DEBUG_ON)
         {
             fprintf(stderr,"MEF: phase:%s, $s not acceptabler proxy, %s\n",
-                    phase, conn->client_ip, r->unparsed_uri);
+                    phase, conn->client_ip);
             fflush(stderr);
         }
         return DECLINED;
