@@ -554,6 +554,7 @@ static int spoof_not_initial(request_rec *this_r, request_rec *other_r,
     /* Ensure the conn_rec is spoofed */
     *remote_in_addr = saved->new_in_addr;
     this_r->connection->client_ip = saved->new_client_ip;
+    this_r->useragent_ip = saved->new_client_ip;
     saved->conn_rec_mod_state = CONN_REC_MODIFIED;
     /* Force re-evaluation of the remote_host value */
     saved->connection->remote_host = NULL;
@@ -600,6 +601,7 @@ static int undo_spoof(MEFsave_rec *saved, request_rec *r, char *phase)
     /* Do the restoring */
     *remote_in_addr = saved->orig_in_addr;
     saved->connection->client_ip = saved->orig_client_ip;
+    r->useragent_ip = saved->orig_client_ip;
     saved->connection->remote_host = NULL;
     ap_get_remote_host(saved->connection, saved->per_dir_config,
                        REMOTE_HOST, NULL);
@@ -652,6 +654,7 @@ static int redo_spoof(MEFsave_rec *saved, request_rec *r, char *phase)
     /* Modify it all again */
     *remote_in_addr = saved->new_in_addr;
     saved->connection->client_ip = saved->new_client_ip;
+    r->useragent_ip = saved->new_client_ip;
     saved->connection->remote_host = NULL;
     ap_get_remote_host(saved->connection, saved->per_dir_config,
                        REMOTE_HOST, NULL);
