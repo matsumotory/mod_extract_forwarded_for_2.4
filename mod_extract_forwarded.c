@@ -482,6 +482,7 @@ static int spoof_initial(request_rec *r, char *spoof_ip, char *phase)
     /* Then the modifying of the conn_rec */
     *remote_in_addr = saved->new_in_addr;
     saved->connection->client_ip = saved->new_client_ip;
+    r->useragent_ip = saved->new_client_ip;
     saved->conn_rec_mod_state = CONN_REC_MODIFIED;
     /* Force re-evaluation of the remote_host value */
     saved->connection->remote_host = NULL;
