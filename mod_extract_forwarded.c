@@ -602,13 +602,16 @@ static int undo_spoof(MEFsave_rec *saved, request_rec *r, char *phase)
     /* Do the restoring */
     *remote_in_addr = saved->orig_in_addr;
     saved->connection->client_ip = saved->orig_client_ip;
-    r->useragent_ip = saved->orig_client_ip;
     saved->connection->remote_host = NULL;
     ap_get_remote_host(saved->connection, saved->per_dir_config,
                        REMOTE_HOST, NULL);
     saved->conn_rec_mod_state = CONN_REC_RESTORED;
     if (r != NULL)
     {
+        if (r->useragent_ip != NULL)
+        {
+            r->useragent_ip = saved->orig_client_ip;
+        }
         if (saved->envar != NULL)
         {
             apr_table_unset(r->subprocess_env, saved->envar);
